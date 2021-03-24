@@ -4,7 +4,7 @@ from base64 import nil
 
 
 type
-  KeyError = object of Exception
+  KeyError = object of ValueError
 
 proc checkJsonNodeKind*(node: JsonNode, kind: JsonNodeKind) =
   # Check that a given JsonNode has a given kind, raise InvalidClaim if not

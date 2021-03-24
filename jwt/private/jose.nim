@@ -3,47 +3,89 @@ import json, strutils
 import utils
 
 type
-  CryptoException* = object of Exception
+  CryptoException* = object of ValueError
   UnsupportedAlgorithm* = object of CryptoException
 
-  SignatureAlgorithm* = enum
-    NONE
-    HS256
-    HS384
-    HS512
-    RS256
-    RS384
-    RS512
-    ES256
-    ES384
-    ES512
+  AlgorithmSize* {. pure .} = enum
+    S256 = 256
+    S384 = 384
+    S512 = 512
+
+  AlgorithmKind* {. pure .} = enum
+    HS
+    RS
+    ES
+  
+  Algorithm* = object
+    kind*: AlgorithmKind
+    size*: AlgorithmSize
 
   JOSEHeader* = object
-    alg*: SignatureAlgorithm
+    alg*: Algorithm
     typ*: string
 
+proc createAlgorithm*(kind: AlgorithmKind, size: AlgorithmSize): Algorithm =
+  result.kind = kind
+  result.size = size
 
-proc strToSignatureAlgorithm(s: string): SignatureAlgorithm =
-  try:
-    result = parseEnum[SignatureAlgorithm](s)
-  except ValueError:
+
+let
+  HS256* = createAlgorithm(HS, S256)
+  HS384* = createAlgorithm(HS, S384)
+  HS512* = createAlgorithm(HS, S512)
+  RS256* = createAlgorithm(RS, S256)
+  RS384* = createAlgorithm(RS, S384)
+  RS512* = createAlgorithm(RS, S512)
+  ES256* = createAlgorithm(ES, S256)
+  ES384* = createAlgorithm(ES, S384)
+  ES512* = createAlgorithm(ES, S512)
+
+
+proc `$`*(algorithm: Algorithm): string =
+  $algorithm.kind & $algorithm.size.ord
+
+
+proc strToAlgorithmKind(s: string): AlgorithmKind =
+  if s.startsWith("HS"):
+    return HS
+  elif s.startsWith("RS"):
+    return RS
+  elif s.startsWith("ES"):
+    return ES
+  else:
     raise newException(UnsupportedAlgorithm, "$# isn't supported" % s)
 
 
-proc toHeader*(j: JsonNode): JOSEHeader =
-  # Check that the keys are present so we dont blow up.
-  utils.checkKeysExists(j, "alg", "typ")
+proc strToAlgorithmSize(s: string): AlgorithmSize =
+  if s.endsWith("256"):
+    return S256
+  elif s.endsWith("384"):
+    return S384
+  elif s.endsWith("512"):
+    return S512
+  else:
+    raise newException(UnsupportedAlgorithm, "$# isn't supported" % s)  
 
-  let algStr = j["alg"].getStr()
-  let algo = strToSignatureAlgorithm(algStr)
+
+proc strToAlgorithm(s: string): Algorithm =
+  result.kind = s.strToAlgorithmKind
+  result.size = s.strToAlgorithmSize
+
+
+proc toHeader*(node: JsonNode): JOSEHeader =
+  # Check that the keys are present so we dont blow up.
+  node.checkKeysExists("alg", "typ")
+
+  let algStr = node["alg"].getStr()
+  let algo = strToAlgorithm(algStr)
 
   result = JOSEHeader(
     alg: algo,
-    typ: j["typ"].getStr()
+    typ: node["typ"].getStr()
   )
 
 
-proc `%`*(alg: SignatureAlgorithm): JsonNode =
+proc `%`*(alg: Algorithm): JsonNode =
   let s = $alg
   return %s
 

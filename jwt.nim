@@ -1,12 +1,9 @@
 import json, strutils, tables, times
-import bearssl
 
-from jwt/private/crypto import nil
-
-import jwt/private/[claims, jose, utils]
+import jwt/private/[claims, crypto, jose, utils]
 
 type
-  InvalidToken* = object of Exception
+  InvalidToken* = object of ValueError
 
   JWT* = object
     headerB64: string
@@ -65,68 +62,14 @@ proc loaded*(token: JWT): string =
 proc parsed*(token: JWT): string =
   result = token.header.toBase64 & "." & token.claims.toBase64
 
-# Signs a string with a secret
-proc signString*(toSign: string, secret: string, algorithm: SignatureAlgorithm = HS256): seq[byte] =
-  template hsSign(meth: typed): seq[byte] =
-    crypto.bearHMAC(addr meth, secret, toSign)
-
-  template rsSign(hc, oid: typed, hashLen: int): seq[byte] =
-    crypto.bearSignRSPem(toSign, secret, addr hc, oid, hashLen)
-
-  template ecSign(eng, hc: typed): seq[byte] =
-    crypto.bearSignECPem(toSign, secret, addr hc, addr eng)
-  
-  case algorithm
-  of HS256:
-    return hsSign(sha256Vtable)
-  of HS384:
-    return hsSign(sha384Vtable)
-  of HS512:
-    return hsSign(sha512Vtable)
-  of RS256:
-    return rsSign(sha256Vtable, HASH_OID_SHA256, sha256SIZE)
-  of RS384:
-    return rsSign(sha384Vtable, HASH_OID_SHA384, sha384SIZE)
-  of RS512:
-    return rsSign(sha512Vtable, HASH_OID_SHA512, sha512SIZE)
-  of ES256:
-    return ecSign(ecAllM15, sha256Vtable)
-  of ES384:
-    return ecSign(ecAllM15, sha384Vtable)
-  of ES512:
-    return ecSign(ecAllM15, sha512Vtable)
-
-  # of ES384:
-  #   return rsSign(crypto.EVP_sha384())
-  else:
-    raise newException(UnsupportedAlgorithm, $algorithm & " isn't supported")
-
-# Verify that the token is not tampered with
-proc verifySignature*(data: string, signature: seq[byte], secret: string,
-    alg: SignatureAlgorithm): bool =
-  case alg
-  of HS256, HS384, HS512:
-    let dataSignature = signString(data, secret, alg)
-    result = dataSignature == signature
-  of RS256:
-    result = crypto.bearVerifyRSPem(data, secret, signature, addr sha256Vtable, HASH_OID_SHA256, sha256SIZE)
-  of RS384:
-    result = crypto.bearVerifyRSPem(data, secret, signature, addr sha384Vtable, HASH_OID_SHA384, sha384SIZE)
-  of RS512:
-    result = crypto.bearVerifyRSPem(data, secret, signature, addr sha512Vtable, HASH_OID_SHA512, sha512SIZE)
-  # of ES256:
-  #   result = crypto.bearVerifyECPem(data, secret, signature, addr sha256Vtable, addr ecPrimeI15, sha256SIZE)
-
-  else:
-    assert(false, "Not implemented")  
-
 proc sign*(token: var JWT, secret: string) =
   assert token.signature.len == 0
-  token.signature = signString(token.parsed, secret, token.header.alg)
+  let alg = token.header.alg
+  token.signature = alg.signString(token.parsed, secret)
 
 # Verify a token typically an incoming request
-proc verify*(token: JWT, secret: string, alg: SignatureAlgorithm): bool =
-  token.header.alg == alg and verifySignature(token.loaded, token.signature, secret, alg)
+proc verify*(token: JWT, secret: string, alg: Algorithm): bool =
+  token.header.alg == alg and alg.verifySignature(token.loaded, token.signature, secret)
 
 proc toString*(token: JWT): string =
   token.header.toBase64 & "." & token.claims.toBase64 & "." & token.signatureToB64
