@@ -24,6 +24,7 @@ type
     alg*: Algorithm
     typ*: string
 
+
 proc createAlgorithm*(kind: AlgorithmKind, size: AlgorithmSize): Algorithm =
   result.kind = kind
   result.size = size

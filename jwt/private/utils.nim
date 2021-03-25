@@ -17,14 +17,17 @@ proc checkKeysExists*(node: JsonNode, keys: varargs[string]) =
     if not node.hasKey(key):
       raise newException(KeyError, "$# is not present." % key)
 
-proc encodeUrlSafe*(s: openarray[byte]): string =
-  when NimMajor >= 1 and (NimMinor >= 1 or NimPatch >= 2):
-    result = base64.encode(s)
-  else:
-    result = base64.encode(s, newLine="")
+proc makeItSafe*(s: string): string =
+  result = s
   while result.endsWith("="):
     result.setLen(result.len - 1)
   result = result.replace('+', '-').replace('/', '_')
+
+proc encodeUrlSafe*(s: openarray[byte]): string =
+  when NimMajor >= 1 and (NimMinor >= 1 or NimPatch >= 2):
+    makeItSafe(base64.encode(s))
+  else:
+    makeItSafe(base64.encode(s, newLine=""))
 
 proc encodeUrlSafe*(s: openarray[char]): string {.inline.} =
   encodeUrlSafe(s.toOpenArrayByte(s.low, s.high))
@@ -38,7 +41,3 @@ proc decodeUrlSafeAsString*(s: string): string =
 proc decodeUrlSafe*(s: string): seq[byte] =
   cast[seq[byte]](decodeUrlSafeAsString(s))
 
-proc toUtf*(s: seq[byte]): string =
-  result = newString(s.len)
-  if s.len > 0:
-    copyMem(addr result[0], unsafeAddr s[0], s.len)
